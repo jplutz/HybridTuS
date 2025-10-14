@@ -1,0 +1,52 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    properties:
+      hibernate.default_schema: app
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    default-schema: app
+    schemas: app
+    locations: classpath:db/migration
+    clean-disabled: false
+    baseline-on-migrate: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,mappings
+  endpoint:
+    health:
+      show-details: always
+
+llm:
+  provider: anthropic
+  api-key: ${ANTHROPIC_API_KEY:}
+  model: claude-3-7-sonnet-20250219
+  temperature: 0.0
+  max-tokens: 2048
+  timeout-ms: 10000
+
+mastery:
+  alpha: 0.4
+  threshold: 0.7
+
+api:
+  token: ${API_TOKEN:local-dev-token-12345}
+
+rate-limit:
+  mutating-requests: 60    # Per minute for POST/PUT/PATCH/DELETE
+  llm-requests: 10          # Per minute for LLM endpoints
+  generate-requests: 5      # Per minute for generation endpoints
+
+

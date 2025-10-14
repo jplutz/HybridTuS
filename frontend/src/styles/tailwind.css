@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global adjustments */
+html, body, #root {
+    height: 100%;
+}
+
+body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+}
+
+code, pre {
+    @apply font-mono;
+}
