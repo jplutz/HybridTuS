@@ -152,7 +152,8 @@ export const api = {
    * Returns: Response message indicating if interaction was recorded or filtered
    */
   async logInteraction(interaction: InteractionRequest): Promise<{ recorded: boolean; message: string }> {
-    logToConsole("DB", "info", "INSERT", `Logged interaction: learnerId=${interaction.learnerId}, loId=${interaction.loId}`);
+    const target = interaction.loId ? `loId=${interaction.loId}` : `conceptId=${interaction.conceptId}`;
+    logToConsole("DB", "info", "INSERT", `Logged interaction: learnerId=${interaction.learnerId}, ${target}`);
 
     const url = `${BASE_URL}/api/interactions`;
     const res = await fetch(url, {

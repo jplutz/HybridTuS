@@ -24,6 +24,7 @@ public class InteractionController {
         boolean recorded = service.record(
                 req.learnerId,
                 req.loId,
+                req.conceptId,
                 req.score,
                 req.scoreRaw,
                 req.hintCount,

@@ -90,7 +90,8 @@ export interface RecommendationResponse {
 
 export interface InteractionRequest {
   learnerId: number;
-  loId: number;
+  loId?: number;  // Learning object ID (optional if conceptId is provided)
+  conceptId?: number;  // Concept ID (for exercise interactions without LO)
   score?: number; // deprecated, use scoreRaw
   scoreRaw?: number; // 1-5 scale
   hintCount?: number;

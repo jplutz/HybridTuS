@@ -170,7 +170,7 @@ export default function PracticeMode() {
       try {
         const interactionResult = await api.logInteraction({
           learnerId: learner.id,
-          loId: currentExercise.loId,
+          conceptId: currentExercise.conceptId,  // Use conceptId for exercise interactions
           score: result.score,
           scoreRaw: scoreRaw,  // Kept for historical/audit purposes
           hintCount: 0,

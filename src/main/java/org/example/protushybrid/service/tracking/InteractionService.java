@@ -34,17 +34,20 @@ public class InteractionService {
     private final InteractionRepository interactions;
     private final LearnerRepository learners;
     private final LearningObjectRepository los;
+    private final org.example.protushybrid.repository.core.ConceptRepository conceptRepository;
     private final MasteryService masteryService;
     private final SequenceStatsService statsService;
 
     public InteractionService(InteractionRepository interactions,
                               LearnerRepository learners,
                               LearningObjectRepository los,
+                              org.example.protushybrid.repository.core.ConceptRepository conceptRepository,
                               MasteryService masteryService,
                               SequenceStatsService statsService) {
         this.interactions = interactions;
         this.learners = learners;
         this.los = los;
+        this.conceptRepository = conceptRepository;
         this.masteryService = masteryService;
         this.statsService = statsService;
     }
@@ -53,7 +56,8 @@ public class InteractionService {
      * Record an interaction with anti-gaming filters.
      *
      * @param learnerId Learner ID
-     * @param loId Learning object ID
+     * @param loId Learning object ID (optional if conceptId is provided)
+     * @param conceptId Concept ID (for exercise interactions without LO)
      * @param score Score achieved (0.0-1.0), used directly for EWMA mastery tracking
      * @param scoreRaw Raw score on 1-5 scale (nullable for non-graded, kept for audit/historical purposes)
      * @param hintCount Number of hints used
@@ -61,13 +65,21 @@ public class InteractionService {
      * @return true if interaction was recorded, false if filtered out
      */
     @Transactional
-    public boolean record(Long learnerId, Long loId, Double score, Short scoreRaw,
+    public boolean record(Long learnerId, Long loId, Long conceptId, Double score, Short scoreRaw,
                           Integer hintCount, Integer durationSec) {
         var learner = learners.findById(learnerId)
                 .orElseThrow(() -> new RuntimeException("Learner not found: " + learnerId));
-        var lo = los.findById(loId)
-                .orElseThrow(() -> new RuntimeException("Learning object not found: " + loId));
-        var concept = lo.getConcept();
+
+        // For exercise interactions, conceptId is provided instead of loId
+        var lo = (loId != null) ? los.findById(loId).orElse(null) : null;
+        var concept = (lo != null) ? lo.getConcept() :
+                     (conceptId != null) ? conceptRepository.findById(conceptId)
+                        .orElseThrow(() -> new RuntimeException("Concept not found: " + conceptId))
+                     : null;
+
+        if (concept == null) {
+            throw new RuntimeException("Either loId or conceptId must be provided");
+        }
 
         // Anti-gaming filter: bot detection
         Instant oneHourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
@@ -81,38 +93,44 @@ public class InteractionService {
         // Anti-gaming filter: minimum duration (unless it's a retry)
         boolean isGraded = scoreRaw != null;
         int minDuration = isGraded ? MIN_DURATION_GRADED_SEC : MIN_DURATION_VIEW_SEC;
-        var recent = interactions.findRecentByLearnerAndLO(learnerId, loId, oneHourAgo);
+
+        // For exercises (conceptId-based), check recent interactions by concept
+        // For LOs, check by LO
+        var recent = (loId != null)
+            ? interactions.findRecentByLearnerAndLO(learnerId, loId, oneHourAgo)
+            : interactions.findRecentByLearnerAndConcept(learnerId, conceptId, oneHourAgo);
         boolean isRetry = !recent.isEmpty();
 
         if (!isRetry && durationSec != null && durationSec < minDuration) {
-            log.debug("Interaction filtered: duration {}s < minimum {}s for learner {} on LO {}",
-                    durationSec, minDuration, learnerId, loId);
+            log.debug("Interaction filtered: duration {}s < minimum {}s for learner {} on {} {}",
+                    durationSec, minDuration, learnerId,
+                    (loId != null ? "LO" : "concept"), (loId != null ? loId : conceptId));
             return false;
         }
 
         // Anti-gaming filter: rate limit repeats
         if (recent.size() >= MAX_REPEATS_PER_HOUR) {
-            log.debug("Rate limit reached for learner {} on LO {}: {} attempts in last hour",
-                    learnerId, loId, recent.size());
+            log.debug("Rate limit reached for learner {} on {} {}: {} attempts in last hour",
+                    learnerId, (loId != null ? "LO" : "concept"), (loId != null ? loId : conceptId), recent.size());
             return false;
         }
 
         // Record interaction
         var inter = new Interaction();
         inter.setLearner(learner);
-        inter.setLearningObject(lo);
+        inter.setLearningObject(lo);  // May be null for exercise interactions
         inter.setConcept(concept);
         inter.setAction(scoreRaw != null ? "COMPLETE" : "VIEW"); // COMPLETE for graded, VIEW for non-graded
         inter.setResult("score");
         inter.setScore(score);
         inter.setScoreRaw(scoreRaw);
         inter.setHintCount(hintCount != null ? hintCount : 0);
-        inter.setLoType(lo.getType());
+        inter.setLoType(lo != null ? lo.getType() : "EXERCISE");  // Use "EXERCISE" for practice interactions
         inter.setDurationSeconds(durationSec != null ? durationSec : 0);
         interactions.save(inter);
 
-        log.debug("Recorded interaction for learner {} on LO {} with score {} (scoreRaw: {})",
-                learnerId, loId, score, scoreRaw);
+        log.debug("Recorded interaction for learner {} on {} {} with score {} (scoreRaw: {})",
+                learnerId, (lo != null ? "LO" : "concept"), (lo != null ? loId : conceptId), score, scoreRaw);
 
         // Update mastery only if graded (scoreRaw != null indicates graded interaction)
         if (scoreRaw != null && score != null && concept != null) {
@@ -120,8 +138,8 @@ public class InteractionService {
             log.debug("Updated mastery for learner {} in concept {} with score {}", learnerId, concept.getId(), score);
         }
 
-        // Update sequence stats for incremental mining
-        if (concept != null && lo.getType() != null) {
+        // Update sequence stats for incremental mining (only for LO interactions, not exercises)
+        if (concept != null && lo != null && lo.getType() != null) {
             statsService.updateStats(learnerId, concept.getId(), lo.getType());
         }
 

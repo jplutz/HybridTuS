@@ -39,11 +39,20 @@ public interface InteractionRepository extends JpaRepository<Interaction, Long> 
     long countByLearnerIdAndTimestampAfter(@Param("learnerId") Long learnerId, @Param("since") Instant since);
 
     /**
-     * Find recent interactions for rate limiting identical repeats
+     * Find recent interactions for rate limiting identical repeats (by LO)
      */
     @Query("SELECT i FROM Interaction i WHERE i.learner.id = :learnerId AND i.learningObject.id = :loId " +
            "AND i.timestamp >= :since ORDER BY i.timestamp DESC")
     List<Interaction> findRecentByLearnerAndLO(@Param("learnerId") Long learnerId,
                                                 @Param("loId") Long loId,
                                                 @Param("since") Instant since);
+
+    /**
+     * Find recent interactions for rate limiting exercise practice (by concept)
+     */
+    @Query("SELECT i FROM Interaction i WHERE i.learner.id = :learnerId AND i.concept.id = :conceptId " +
+           "AND i.timestamp >= :since ORDER BY i.timestamp DESC")
+    List<Interaction> findRecentByLearnerAndConcept(@Param("learnerId") Long learnerId,
+                                                     @Param("conceptId") Long conceptId,
+                                                     @Param("since") Instant since);
 }
